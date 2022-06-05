@@ -19,10 +19,12 @@ package tekton
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	libhandler "github.com/operator-framework/operator-lib/handler"
 	"github.com/redhat-appstudio/release-service/api/v1alpha1"
 	tektonv1beta1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -148,6 +150,12 @@ func (r *ReleasePipelineRun) WithReleaseStrategy(strategy *v1alpha1.ReleaseStrat
 		})
 	}
 
+	if strategy.Spec.PersistentVolumeClaim == "" {
+		r.WithWorkspace(os.Getenv("DEFAULT_RELEASE_WORKSPACE_NAME"), os.Getenv("DEFAULT_RELEASE_PVC"))
+	} else {
+		r.WithWorkspace(os.Getenv("DEFAULT_RELEASE_WORKSPACE_NAME"), strategy.Spec.PersistentVolumeClaim)
+	}
+
 	r.WithServiceAccount(strategy.Spec.ServiceAccount)
 
 	return r
@@ -157,6 +165,23 @@ func (r *ReleasePipelineRun) WithReleaseStrategy(strategy *v1alpha1.ReleaseStrat
 // execution of the different Pipeline tasks.
 func (r *ReleasePipelineRun) WithServiceAccount(serviceAccount string) *ReleasePipelineRun {
 	r.Spec.ServiceAccountName = serviceAccount
+
+	return r
+}
+
+// WithWorkspace adds a workspace to the PipelineRun using the given name and PersistentVolumeClaim.
+// If any of those values is empty, no workspace will be added.
+func (r *ReleasePipelineRun) WithWorkspace(name, persistentVolumeClaim string) *ReleasePipelineRun {
+	if name == "" || persistentVolumeClaim == "" {
+		return r
+	}
+
+	r.Spec.Workspaces = append(r.Spec.Workspaces, tektonv1beta1.WorkspaceBinding{
+		Name: name,
+		PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+			ClaimName: persistentVolumeClaim,
+		},
+	})
 
 	return r
 }
